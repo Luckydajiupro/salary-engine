@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "salary-engine"
+version = "1.0.0"
+description = "中国工资到手计算引擎：五险一金、累计预扣个税、到手金额"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["salary", "payroll", "tax", "china"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Office/Business :: Financial",
+]
+
+[project.urls]
+Homepage = "https://github.com/salary-engine/salary-engine"
+
+[tool.setuptools.packages.find]
+include = ["salary_engine*"]
