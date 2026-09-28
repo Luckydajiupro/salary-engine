@@ -20,15 +20,15 @@ pip install salary-engine
 from salary_engine import compute
 
 r = compute({
-    "city_id": "beijing",
+    "city_code": 110000,
     "monthly_gross": 15000,
     "months": 12,
 })
 
-r["monthly"]["net"]          # 月均到手
-r["yearly"]["net"]           # 全年到手
-r["yearly"]["tax"]           # 全年个税
-r["monthly"]["breakdown"]    # 五险一金明细（逐项）
+r["pay"]["net"]              # 月均到手
+r["annual"]["net"]           # 全年到手
+r["annual"]["tax"]           # 全年个税
+r["pay"]["breakdown"]        # 五险一金明细（逐项）
 r["hidden"]["fund_monthly"]  # 公积金（个人 + 单位，都归你）
 r["warnings"]                # 基数托底 / 封顶等提示
 ```
@@ -41,8 +41,8 @@ r["warnings"]                # 基数托底 / 封顶等提示
 
 | 参数 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `city_id` | str | — | 城市 id。见下方「内置城市」 |
-| `city_override` | dict | — | 直接传入城市配置对象，优先于 `city_id` |
+| `city_code` | int | — | 国标行政区划代码。见下方「内置城市」 |
+| `city_override` | dict | — | 直接传入城市配置对象，优先于 `city_code` |
 | `monthly_gross` | float | — | 税前月薪 |
 | `social_base_mode` | str | `'actual'` | 社保基数口径：`'actual'` 按实际工资 / `'min'` 按下限 / `'manual'` 手动指定 |
 | `social_base_manual` | float | 0 | `social_base_mode='manual'` 时的基数 |
@@ -51,14 +51,15 @@ r["warnings"]                # 基数托底 / 封顶等提示
 | `fund_rate` | float | `0.12` | 公积金个人缴存比例，取值 0–0.12 |
 | `monthly_additional` | float | 0 | 专项附加扣除合计（元/月） |
 | `monthly_other` | float | 0 | 其他扣除（企业年金等，元/月） |
-| `months` | int | **12** | 计算月数 |
+| `months` | int | **1** | 计算月数 |
 
 > **`months` 不是简单的乘法系数。** 工资薪金走**累计预扣法**：年初按 3% 预扣，
 > 累计应纳税所得额越过 36,000 后跳档，年底扣得最多。
-> 所以 `compute({... "months": 12})["monthly"]["tax"]` 是**月均个税**，
+> 所以 `compute({... "months": 12})["pay"]["tax"]` 是**月均个税**，
 > 跟只算 1 个月的个税**不是同一个数**。
 > 例：北京月薪 15,000 时，第 1 个月个税 198.66，全年 5,426.40，月均 452.20 ——
 > 拿 452.20 当"1 个月的个税"会差一倍多。
+> **默认只算 1 个月**；要全年视图请显式传 `"months": 12`。
 
 ### 返回值
 
@@ -66,28 +67,24 @@ r["warnings"]                # 基数托底 / 封顶等提示
 | --- | --- |
 | `city` | 实际使用的城市配置对象 |
 | `months` | 实际使用的计算月数 |
-| `monthly` | 月度视图：`gross` / `breakdown` / `bases` / `social_total` / `fund_personal` / `fund_company` / `special_deduction` / `tax`（月均）/ `net`（月均） |
-| `yearly` | 年度视图：`gross` / `social_and_fund` / `tax` / `net` |
+| `pay` | 月度视图：`gross` / `breakdown` / `bases` / `social_total` / `fund_personal` / `fund_company` / `special_deduction` / `tax`（月均）/ `net`（月均） |
+| `annual` | 年度视图：`gross` / `social_and_fund` / `tax` / `net` |
 | `hidden` | 「被藏起来的钱」：`fund_personal_monthly` / `fund_company_monthly` / `fund_monthly` / `fund_yearly` |
 | `tax_rows` | 逐月个税明细（累计法） |
 | `warnings` | 提示列表：社保基数托底、基数封顶、政策数据版本 |
-
-### 异常
-
-城市 id 无法识别时抛 `ValueError`。
 
 ---
 
 ## 内置城市
 
-| `city_id` | 城市 |
+| `city_code` | 城市 |
 | --- | --- |
-| `beijing` | 北京 |
-| `shanghai` | 上海 |
-| `shenzhen` | 深圳 |
-| `guangzhou` | 广州 |
-| `hangzhou` | 杭州 |
-| `custom` | 自定义（配合 `city_override` 使用） |
+| `110000` | 北京 |
+| `310000` | 上海 |
+| `440300` | 深圳 |
+| `440100` | 广州 |
+| `330100` | 杭州 |
+| `0` | 自定义（配合 `city_override` 使用） |
 
 每个城市的数据都带三个溯源字段：
 
@@ -97,7 +94,7 @@ r["warnings"]                # 基数托底 / 封顶等提示
 | `verified_at` | 这份数据是哪个月核对的 |
 | `sources` | 政策依据（通告名或文号） |
 
-`get_city(city_id)` 取城市配置，`data_age_warning()` 可检查数据是否已超过 12 个月未核对。
+`get_city_by_code(code)` 按行政区划代码取城市配置，`data_age_warning()` 可检查数据是否已超过 12 个月未核对。
 
 ---
 
@@ -111,7 +108,7 @@ r["warnings"]                # 基数托底 / 封顶等提示
 
 ## 已知限制
 
-- 只内置 5 个城市；其余城市请用 `city_id='custom'` 配合 `city_override` 手动填。
+- 只内置 5 个城市；其余城市请用 `city_code=0` 配合 `city_override` 手动填。
 - 深圳医保按**一档（2%）**计算。
 - 大病医疗只能在年度汇算清缴时扣除，不参与月度预扣。
 - 公积金利息与提取规则未建模。

@@ -8,12 +8,12 @@
 
 import unittest
 
-from salary_engine import compute, get_city, tax
+from salary_engine import compute, get_city_by_code, tax
 from salary_engine.cities import CITIES
 
 
-def run(gross, city_id="beijing", months=12, **extra):
-    payload = {"city_id": city_id, "monthly_gross": gross, "months": months}
+def run(gross, city_code=110000, months=12, **extra):
+    payload = {"city_code": city_code, "monthly_gross": gross, "months": months}
     payload.update(extra)
     return compute(payload)
 
@@ -22,68 +22,84 @@ class CitiesTest(unittest.TestCase):
     def test_builtin_city_count(self):
         self.assertEqual(len(CITIES), 5)
 
+    def test_lookup_by_code(self):
+        self.assertEqual(get_city_by_code(110000)["name"], "北京")
+        self.assertEqual(get_city_by_code(310000)["name"], "上海")
+        self.assertEqual(get_city_by_code(440300)["name"], "深圳")
+        self.assertEqual(get_city_by_code(440100)["name"], "广州")
+        self.assertEqual(get_city_by_code(330100)["name"], "杭州")
+
+    def test_unknown_code_returns_none(self):
+        self.assertIsNone(get_city_by_code(999999))
+
     def test_beijing_limits(self):
-        self.assertEqual(get_city("beijing")["social"]["base_min"], 7270)
-        self.assertEqual(get_city("beijing")["social"]["base_max"], 36348)
+        self.assertEqual(get_city_by_code(110000)["social"]["base_min"], 7270)
+        self.assertEqual(get_city_by_code(110000)["social"]["base_max"], 36348)
 
     def test_shanghai_limits(self):
-        self.assertEqual(get_city("shanghai")["social"]["base_max"], 37731)
+        self.assertEqual(get_city_by_code(310000)["social"]["base_max"], 37731)
 
     def test_shenzhen_three_independent_bases(self):
-        shenzhen = get_city("shenzhen")
+        shenzhen = get_city_by_code(440300)
         self.assertEqual(shenzhen["social"]["base_max"], 27549)
         self.assertEqual(shenzhen["medical_base"]["base_max"], 33633)
         self.assertEqual(shenzhen["fund"]["base_max"], 48471)
 
     def test_guangzhou_medical_base(self):
-        self.assertEqual(get_city("guangzhou")["medical_base"]["base_max"], 31170)
-
-    def test_unknown_city_returns_none(self):
-        self.assertIsNone(get_city("nowhere"))
-
-    def test_custom_city(self):
-        self.assertEqual(get_city("custom")["name"], "自定义")
+        self.assertEqual(get_city_by_code(440100)["medical_base"]["base_max"], 31170)
 
 
 class ComputeTest(unittest.TestCase):
-    def test_beijing_15000(self):
+    def test_defaults_to_one_month(self):
+        result = run(15000, months=None)
+        self.assertEqual(result["months"], 1)
+        self.assertEqual(len(result["tax_rows"]), 1)
+        self.assertEqual(result["pay"]["net"], 11423.34)
+        self.assertEqual(result["pay"]["tax"], 198.66)
+
+    def test_beijing_15000_full_year(self):
         result = run(15000)
-        self.assertEqual(result["monthly"]["gross"], 15000)
-        self.assertEqual(result["monthly"]["net"], 11169.8)
-        self.assertEqual(result["yearly"]["net"], 134037.6)
-        self.assertEqual(result["yearly"]["tax"], 5426.4)
-        self.assertEqual(result["monthly"]["tax"], 452.2)
+        self.assertEqual(result["months"], 12)
+        self.assertEqual(result["pay"]["gross"], 15000)
+        self.assertEqual(result["pay"]["net"], 11169.8)
+        self.assertEqual(result["pay"]["tax"], 452.2)
+        self.assertEqual(result["annual"]["net"], 134037.6)
+        self.assertEqual(result["annual"]["tax"], 5426.4)
         self.assertEqual(result["tax_rows"][0]["tax"], 198.66)
         self.assertEqual(len(result["tax_rows"]), 12)
         self.assertEqual(result["city"]["id"], "beijing")
 
     def test_social_base_floor(self):
         result = run(4000)
-        self.assertEqual(result["monthly"]["net"], 2753.65)
-        self.assertTrue(result["monthly"]["bases"]["social"]["clamped_low"])
-        self.assertEqual(result["warnings"][0]["title"], "社保基数被下限托底")
+        self.assertEqual(result["pay"]["net"], 2753.65)
+        self.assertTrue(result["pay"]["bases"]["social"]["clamped_low"])
+        titles = [w["title"] for w in result["warnings"]]
+        self.assertIn("社保基数被下限托底", titles)
 
     def test_zero_income_has_no_deduction(self):
-        self.assertEqual(run(0)["monthly"]["net"], 0)
-
-    def test_months_is_not_a_simple_multiplier(self):
-        one = run(15000, months=1)
-        self.assertEqual(len(one["tax_rows"]), 1)
-        self.assertEqual(one["tax_rows"][0]["tax"], 198.66)
-        # 12 个月的「月均个税」是 452.20，跟单月 198.66 不是一个数
-        self.assertEqual(one["monthly"]["tax"], 198.66)
-        self.assertEqual(run(15000)["monthly"]["tax"], 452.2)
+        self.assertEqual(run(0)["pay"]["net"], 0)
 
     def test_shenzhen(self):
-        self.assertEqual(run(30000, city_id="shenzhen")["monthly"]["net"], 21242.78)
-
-    def test_unknown_city_raises(self):
-        with self.assertRaises(ValueError):
-            run(10000, city_id="nowhere")
+        self.assertEqual(run(30000, city_code=440300)["pay"]["net"], 21242.78)
 
     def test_hidden_fund(self):
-        result = run(15000)
-        self.assertEqual(result["hidden"]["fund_monthly"], 3600)
+        self.assertEqual(run(15000)["hidden"]["fund_monthly"], 3600)
+
+
+class FallbackTest(unittest.TestCase):
+    """2.0 起 city_code 识别失败不再抛错，而是回落默认城市。"""
+
+    def test_unknown_code_falls_back_without_raising(self):
+        result = run(15000, city_code=999999)
+        self.assertEqual(result["city"]["id"], "beijing")
+        titles = [w["title"] for w in result["warnings"]]
+        self.assertIn("城市代码未识别", titles)
+
+    def test_legacy_city_id_is_silently_ignored(self):
+        result = compute({"city_id": "shanghai", "monthly_gross": 20000, "months": 12})
+        self.assertEqual(result["city"]["id"], "beijing")
+        titles = [w["title"] for w in result["warnings"]]
+        self.assertIn("城市代码未识别", titles)
 
 
 class TaxBracketTest(unittest.TestCase):

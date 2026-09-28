@@ -4,9 +4,9 @@
 
     from salary_engine import compute
 
-    r = compute({"city_id": "beijing", "monthly_gross": 15000})
-    r["monthly"]["net"]   # 月均到手
-    r["yearly"]["net"]    # 全年到手
+    r = compute({"city_code": 110000, "monthly_gross": 15000})
+    r["pay"]["net"]       # 月均到手
+    r["annual"]["net"]    # 全年到手
 """
 
 from . import tax, additional
@@ -16,10 +16,11 @@ from .cities import (
     UNVERIFIED_CITIES,
     data_age_warning,
     get_city,
+    get_city_by_code,
 )
 from .salary import compute, compute_monthly_deductions, resolve_base
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 __all__ = [
     "compute",
@@ -29,6 +30,7 @@ __all__ = [
     "CUSTOM_CITY",
     "UNVERIFIED_CITIES",
     "get_city",
+    "get_city_by_code",
     "data_age_warning",
     "tax",
     "additional",

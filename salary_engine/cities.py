@@ -24,6 +24,7 @@
 CITIES = [
     {
         "id": "beijing",
+        "code": 110000,
         "name": "北京",
         "verified_at": "2026-09",
         "social": {
@@ -55,6 +56,7 @@ CITIES = [
     },
     {
         "id": "shanghai",
+        "code": 310000,
         "name": "上海",
         "verified_at": "2026-09",
         "social": {
@@ -82,6 +84,7 @@ CITIES = [
     },
     {
         "id": "shenzhen",
+        "code": 440300,
         "name": "深圳",
         "verified_at": "2026-09",
         "social": {
@@ -116,6 +119,7 @@ CITIES = [
     },
     {
         "id": "guangzhou",
+        "code": 440100,
         "name": "广州",
         "verified_at": "2026-09",
         "social": {
@@ -149,6 +153,7 @@ CITIES = [
     },
     {
         "id": "hangzhou",
+        "code": 330100,
         "name": "杭州",
         "verified_at": "2026-09",
         "social": {
@@ -186,6 +191,7 @@ UNVERIFIED_CITIES = ["成都", "南京", "武汉", "西安", "苏州", "重庆",
 # 自定义城市模板：所有参数手动填写
 CUSTOM_CITY = {
     "id": "custom",
+    "code": 0,
     "name": "自定义",
     "verified_at": "manual",
     "social": {
@@ -213,6 +219,25 @@ def get_city(city_id):
         return CUSTOM_CITY
     for city in CITIES:
         if city["id"] == city_id:
+            return city
+    return None
+
+
+def get_city_by_code(code):
+    """按【国标行政区划代码】取城市配置，找不到返回 None。
+
+    相比字符串 id，行政区划代码更稳定，也不容易拼错。
+
+    :param code: 行政区划代码，如 110000（北京）、310000（上海）
+    """
+    try:
+        number = int(code)
+    except (TypeError, ValueError):
+        return None
+    if number == 0:
+        return CUSTOM_CITY
+    for city in CITIES:
+        if city.get("code") == number:
             return city
     return None
 

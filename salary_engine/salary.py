@@ -9,6 +9,10 @@
 from . import cities, tax
 from .tax import round2
 
+# 2.0：city_code 识别失败时回落到这个城市。批量算薪时，
+# 一条脏数据不应该把整批任务打断。
+DEFAULT_CITY_CODE = 110000  # 北京
+
 
 def _num(value):
     """把任意输入转成有限数值，转不动就当 0（与历史版本行为一致）。"""
@@ -188,7 +192,7 @@ def compute(inp):
     """主入口。
 
     :param inp: dict，支持：
-        city_id            城市 id（见 cities.py）
+        city_code          国标行政区划代码（见 cities.py 每个城市的 code 字段）
         city_override      自定义城市参数（覆盖 city_id）
         monthly_gross      税前月薪
         social_base_mode   'actual' | 'min' | 'manual'，默认 actual
@@ -198,17 +202,18 @@ def compute(inp):
         fund_rate          公积金个人缴存比例（0–0.12）
         monthly_additional 专项附加扣除合计（元/月）
         monthly_other      其他扣除（企业年金等，元/月）
-        months             计算月数，默认 12
-    :raises ValueError: 城市 id 无法识别
+        months             计算月数，默认 1
     """
     inp = inp or {}
-    city = inp.get("city_override") or cities.get_city(inp.get("city_id"))
+    city = inp.get("city_override") or cities.get_city_by_code(inp.get("city_code"))
+    city_fell_back = False
     if not city:
-        raise ValueError("未知城市: %s" % inp.get("city_id"))
+        city = cities.get_city_by_code(DEFAULT_CITY_CODE)
+        city_fell_back = True
 
     deductions = compute_monthly_deductions(inp, city)
     payload = deductions["payload"]
-    months = int(_num(inp.get("months")) or 12)
+    months = int(_num(inp.get("months")) or 1)
     monthly_additional = _num(inp.get("monthly_additional"))
     monthly_other = _num(inp.get("monthly_other"))
 
@@ -232,6 +237,18 @@ def compute(inp):
     hidden_fund_monthly = round2(payload["fund_personal"] + payload["fund_company"])
 
     warnings = []
+    if city_fell_back:
+        warnings.append(
+            {
+                "level": "warn",
+                "title": "城市代码未识别",
+                "text": (
+                    "city_code %s 无法识别，已按默认城市「%s」计算。"
+                    "请检查是否漏传或传错了 city_code。"
+                    % (inp.get("city_code"), city["name"])
+                ),
+            }
+        )
     if deductions["gross"] > 0 and payload["bases"]["social"]["clamped_low"]:
         warnings.append(
             {
@@ -284,7 +301,7 @@ def compute(inp):
     return {
         "city": city,
         "months": months,
-        "monthly": {
+        "pay": {
             "gross": deductions["gross"],
             "breakdown": payload["breakdown"],
             "bases": payload["bases"],
@@ -298,7 +315,7 @@ def compute(inp):
             "tax": round2(tax_result["total_tax"] / months),  # 月均个税
             "net": round2(total_net / months),  # 月均到手
         },
-        "yearly": {
+        "annual": {
             "gross": tax_result["total_gross"],
             "social_and_fund": total_social_and_fund,
             "tax": tax_result["total_tax"],
